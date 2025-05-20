@@ -12,6 +12,7 @@ class EmbeddingLayer(nn.Module):
 
     def forward(self, x):
         return self.embedding(x)
+    
 #Will want to see how this performs vs. regular embedding
 class LowRankEmbedding(nn.Module):
     def __init__(self, vocab_size, embed_size, rank):
@@ -21,12 +22,13 @@ class LowRankEmbedding(nn.Module):
 
     def forward(self, x):
         return self.B(self.A(x))
-    
-#----- DECODER LAYERS -----
-class RegularDecoder(nn.Module):
-    def __init__(self, embed_size, num_heads, ff_size):
-        super(RegularDecoder, self).__init__()
+
+#----- TRANSFORMER LAYERS -----
+class Transformer(nn.Module):
+    def __init__(self, embed_size, num_heads, ff_size, encoder = True):
+        super(Transformer, self).__init__()
         self.attention = nn.MultiheadAttention(embed_dim=embed_size, num_heads=num_heads, dropout=0.1)
+        self.encoder = encoder
         self.ff = nn.Sequential(
             nn.Linear(embed_size, ff_size),
             nn.ReLU(),
@@ -37,14 +39,18 @@ class RegularDecoder(nn.Module):
         attn_output, _ = self.attention(x, x, x)
         x = x + attn_output
         x = x + self.ff(x)
+        x = F.layer_norm(x, x.size()[1:], eps=1e-6)
         return x
+    
 
-class ACTDecoder(nn.Module):
-    def __init__(self, embed_size, num_heads, ff_size, act_size, halting_threshold, max_thought):
-        super(ACTDecoder, self).__init__()
-        self.decoder = RegularDecoder(embed_size=embed_size, num_heads=num_heads, ff_size=ff_size)
+class ACTEncoder(nn.Module):
+    def __init__(self, embed_size, num_heads, num_transformers, ff_size, act_size, halting_threshold, max_thought):
+        super(ACTEncoder, self).__init__()
+        self.transformers = nn.Sequential(
+            *[Transformer(embed_size, num_heads, ff_size) for _ in range(num_transformers)]
+        )
         self.act = nn.Sequential(
-            nn.Linear(embed_size, act_size), 
+            nn.Linear(embed_size + 1, act_size), 
             nn.ReLU(), 
             nn.Linear(act_size, 1), 
             nn.Sigmoid()
@@ -56,12 +62,19 @@ class ACTDecoder(nn.Module):
         halting_prob = nn.ParameterList([nn.Parameter(0)])
         unused_prob = nn.Parameter(1)
         outputs = nn.ParameterList()
+        thoughts = 0
         
         while (unused_prob >= 1 - self.halting_threshold) and (len(halting_prob) < self.max_thought):
             x = self.decoder(x)
             outputs.append(x)
             
+            thoughts += 1
+            
+            #Add a dimension to x noting how many thoughts have been used -- theoretically this will impact 
+            #Dimension of x is (batch_size, seq_len, embed_size)
+            x = torch.cat((x, torch.full((x.size(0), 1), thoughts).to(x.device)), dim=2)
             act = self.act(x)
+            x = x[:, :, :-1]
             
             state = torch.min(act, unused_prob[-1])
             halting_prob.append(nn.Parameter(state))

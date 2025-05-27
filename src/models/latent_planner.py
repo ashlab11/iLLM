@@ -1,4 +1,4 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from model.layers import TransformerLayer
+from src.layers.basic_transformer import TransformerLayer

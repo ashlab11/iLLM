@@ -1,7 +1,7 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from model.layers import TransformerLayer
+from src.layers.basic_transformer import TransformerLayer
 
 class TestLLM(nn.Module):
     """Test LLM that should perform awfully, but will show proof-of-concept for the training stage"""
@@ -18,10 +18,12 @@ class TestLLM(nn.Module):
         )
         self.lin = nn.Linear(embed_size, vocab_size)
         
-    def forward(self, x):
+    def forward(self, x, mask=None):
         x = self.embedding(x)
         for layer in self.transformers:
-            x = layer(x, causal = True)
+            x = layer(x, causal = True, key_padding_mask = mask)
+        if torch.isnan(x).any():
+            raise ValueError("Output of transformer layers contains NaN values")
         x = self.lin(x)
         return x
         

@@ -24,30 +24,32 @@ class LowRankEmbedding(nn.Module):
         return self.B(self.A(x))
 
 #----- TRANSFORMER LAYERS -----
-class Transformer(nn.Module):
-    def __init__(self, embed_size, num_heads, ff_size, encoder = True):
-        super(Transformer, self).__init__()
+class TransformerLayer(nn.Module):
+    def __init__(self, embed_size, num_heads, ff_size):
+        super(TransformerLayer, self).__init__()
         self.attention = nn.MultiheadAttention(embed_dim=embed_size, num_heads=num_heads, dropout=0.1)
-        self.encoder = encoder
         self.ff = nn.Sequential(
             nn.Linear(embed_size, ff_size),
             nn.ReLU(),
             nn.Linear(ff_size, embed_size)
         )
 
-    def forward(self, x):
-        attn_output, _ = self.attention(x, x, x)
+    def forward(self, x, causal=False):
+        if self.training and causal:
+            #Apply causal attention mask if in training model and causal is True
+            attn_output, _ = self.attention(x, x, x, is_causal=causal, attn_mask = torch.tril(torch.ones(x.size(1), x.size(1), device=x.device)).bool())
+        else:
+            attn_output, _ = self.attention(x, x, x)
         x = x + attn_output
         x = x + self.ff(x)
         x = F.layer_norm(x, x.size()[1:], eps=1e-6)
         return x
-    
 
 class ACTEncoder(nn.Module):
     def __init__(self, embed_size, num_heads, num_transformers, ff_size, act_size, halting_threshold, max_thought):
         super(ACTEncoder, self).__init__()
         self.transformers = nn.Sequential(
-            *[Transformer(embed_size, num_heads, ff_size) for _ in range(num_transformers)]
+            *[TransformerLayer(embed_size, num_heads, ff_size) for _ in range(num_transformers)]
         )
         self.act = nn.Sequential(
             nn.Linear(embed_size + 1, act_size), 

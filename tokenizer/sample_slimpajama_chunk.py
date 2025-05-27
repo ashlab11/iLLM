@@ -4,6 +4,9 @@ Stream a random SlimPajama chunk (10 % of corpus) until ~10 GiB of text.
 """
 
 import random, os, json, requests, io, zstandard as zstd
+import sentencepiece as spm
+from tqdm import tqdm
+tokenizer = spm.SentencePieceProcessor(model_file="tokenizer/tokenizer.model")
 
 CHUNK_ID   = random.randint(0, 9)        # choose chunk0 … chunk9 uniformly
 SAMPLE_GB  = 10
@@ -30,15 +33,24 @@ def stream_zst(url):
 
 # ── stream shards in random order ────────────────────────────────────────────
 written = 0
-with open(OUTFILE, "w", encoding="utf-8") as fout:
+with open(OUTFILE, "w", encoding="utf-8") as fout, \
+    tqdm(total=SAMPLE_GB * 1024**3, unit="B", unit_scale=True, unit_divisor=1024,
+        desc=f"chunk{CHUNK_ID}  ➜ writing",
+        bar_format="{l_bar}{bar}| {n_fmt}/{total_fmt} {unit}  {postfix}") as pbar:
+    
     for url in random.sample(file_urls, len(file_urls)):
         try:
             for ex in stream_zst(url):
                 text = ex["text"].strip()
-                if not text:
+                clean = " ".join(text.split())
+                if len(tokenizer.encode_as_ids(clean)) < 500:  # skip too short examples
                     continue
-                fout.write(text + "\n")
-                written += len(text.encode())
+                fout.write(clean + "\n")
+                delta = len(clean.encode())
+                written += delta
+                pbar.update(delta)
+                pbar.set_postfix_str(f"{written/1024**3:.1f} GiB")
+
                 if written >= SAMPLE_GB * 1024**3:
                     raise StopIteration
         except StopIteration:

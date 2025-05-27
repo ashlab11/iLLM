@@ -3,3 +3,5 @@ data/
 tokenizer/tokenizer.model
 tokenizer/tokenizer.vocab
 .DS_Store
+*__pycache__/
+ILLM.egg-info/

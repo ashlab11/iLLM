@@ -1,4 +1,3 @@
-# scripts/sample_slimpajama_retry.py
 import os
 import time
 from datasets import load_dataset, DownloadConfig
@@ -23,9 +22,10 @@ ds = load_dataset(
 written = 0
 with open(OUT_PATH, "a", encoding="utf-8") as f:
     for ex in ds:
+        
         text = ex.get("text") or ex.get("excerpt") or ""
         line = text.strip() + "\n"
-        if not line.strip():
+        if len(line) < 50:
             continue
 
         # try writing, with simple back-off on HTTPError

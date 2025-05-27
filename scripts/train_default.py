@@ -44,11 +44,11 @@ criterion = nn.CrossEntropyLoss()
 device = torch.device('mps' if torch.mps.is_available() else 'cpu')
 print(f"Using device: {device}")
 model.to(device)
-lens = []
 
 #Getting id for EOS token
 eos_id = tokenizer.piece_to_id('<eos>')
 eos_col = torch.full((batch_size, 1), eos_id, dtype=torch.long, device=device)
+losses = []
 
 for idx, batch in tqdm(enumerate(loader), total = 1440482 // batch_size):
     batch = batch.to(device)
@@ -62,8 +62,9 @@ for idx, batch in tqdm(enumerate(loader), total = 1440482 // batch_size):
     optimizer.step()
     optimizer.zero_grad()
     if idx % 100 == 0:
+        losses.append(loss.item())
         print(f"Batch {idx}, Loss: {loss.item()}")
     if idx % 10000 == 0:
         print(f"Saving model at batch {idx}")
         # Save the model periodically
-        torch.save(model.state_dict(), f'src/models/testllm_batch_{idx}.pth')
+        torch.save(model.state_dict(), f'src/models/testllm.pth')

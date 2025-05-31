@@ -5,4 +5,4 @@ tokenizer/tokenizer.vocab
 .DS_Store
 *__pycache__/
 ILLM.egg-info/
-models/testllm.pth
+src/models/testllm.pth

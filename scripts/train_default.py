@@ -19,7 +19,7 @@ def collate_fn(batch):
     """Collate function to pad sequences in a batch."""
     return pad_sequence(batch, batch_first=True, padding_value=0)
 
-batch_size = 8
+batch_size = 2
 loader = DataLoader(ds, batch_size = batch_size, num_workers = 0, shuffle = False, collate_fn=collate_fn)
 
 tokenizer = spm.SentencePieceProcessor(model_file='tokenizer/tokenizer.model')
@@ -27,8 +27,8 @@ vocab_size = tokenizer.vocab_size()
 params = {
     'vocab_size': vocab_size,
     'embed_size': 512,
-    'num_mha': 4,
-    'num_heads': 16,
+    'num_mha': 96,
+    'num_heads': 64,
     'ff_size': 1024
 }
 

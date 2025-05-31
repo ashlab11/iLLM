@@ -13,7 +13,7 @@ following special tokens:
 import argparse
 import torch
 import sentencepiece as spm
-
+from inference.sampler import Sampler, GreedySampler, TopKSampler, MinPSampler
 from src.models.testllm import TestLLM
 
 
@@ -41,7 +41,9 @@ def generate(
     tokenizer: spm.SentencePieceProcessor,
     prompt: str,
     device: torch.device,
-    max_new_tokens: int = 50,
+    max_new_tokens: int = 100,
+    sampler: Sampler = GreedySampler(),
+    temperature: float = 1.0,
 ) -> str:
     """Generate text from ``prompt`` using greedy decoding."""
     bos_id = tokenizer.bos_id()
@@ -52,14 +54,16 @@ def generate(
         mask = input_tensor == 0  # <pad> token id is 0 when training the tokenizer
         with torch.no_grad():
             logits = model(input_tensor, mask)
-        next_id = int(logits[0, -1].argmax(-1))
+        logits = logits[0, -1]  # Get logits for the last token
+        next_id = sampler.sample(logits, temperature=temperature)
         input_tensor = torch.cat(
             [input_tensor, torch.tensor([[next_id]], device=device)], dim=1
         )
         if next_id == eos_id:
+            print("Generated EOS token, stopping generation.")
             break
     generated_ids = input_tensor.squeeze().tolist()[len(input_ids) :]
-    return tokenizer.decode(generated_ids)
+    return tokenizer.encode_as_string(generated_ids)
 
 
 def chat(
@@ -67,6 +71,7 @@ def chat(
     tokenizer: spm.SentencePieceProcessor,
     device: torch.device,
     max_new_tokens: int,
+    sampler: Sampler,
 ) -> None:
     """Run an interactive chat loop."""
     print('Type "quit" or "exit" to stop.')
@@ -77,7 +82,7 @@ def chat(
             break
         if prompt.strip().lower() in {"quit", "exit"}:
             break
-        response = generate(model, tokenizer, prompt, device, max_new_tokens)
+        response = generate(model, tokenizer, prompt, device, max_new_tokens, sampler)
         print(response)
 
 
@@ -101,12 +106,21 @@ def main() -> None:
         default=50,
         help="Maximum number of tokens to generate",
     )
+    parser.add_argument(
+        "--sampler", 
+        choices=["greedy", "topk", "minp"],
+        default="greedy",
+        help="Sampling strategy to use for text generation"
+    )
     args = parser.parse_args()
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    sampler = GreedySampler() if args.sampler == "greedy" else \
+                TopKSampler(k=50) if args.sampler == "topk" else \
+                MinPSampler(ratio=0.1)
     tokenizer = spm.SentencePieceProcessor(model_file=args.tokenizer_model)
     model = load_model(args.model_path, tokenizer, device)
-    chat(model, tokenizer, device, args.max_new_tokens)
+    chat(model, tokenizer, device, args.max_new_tokens, sampler)
 
 
 if __name__ == "__main__":  # pragma: no cover - CLI entry point
